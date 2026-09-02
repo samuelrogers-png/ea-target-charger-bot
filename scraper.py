@@ -1,24 +1,26 @@
 import os
 import requests
+import cloudscraper
 
 WEBHOOK_URL = os.environ.get("CHAT_WEBHOOK_URL")
-
-# Electrify America Station ID for 4001 S Maryland Pkwy (Target Las Vegas)
 EA_STATION_ID = "200008"
 
 def fetch_and_notify():
-    # Direct query to EA's live public telemetry endpoint
+    # Use cloudscraper to simulate a real browser TLS handshake
+    scraper = cloudscraper.create_scraper(
+        browser={
+            'browser': 'chrome',
+            'platform': 'windows',
+            'desktop': True
+        }
+    )
+    
     url = f"https://api.electrifyamerica.com/v2/locations/{EA_STATION_ID}"
-    
-    headers = {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
-        "Accept": "application/json"
-    }
-    
     status_list = []
     
     try:
-        response = requests.get(url, headers=headers, timeout=10)
+        response = scraper.get(url, timeout=15)
+        print(f"EA API status code: {response.status_code}")
         
         if response.status_code == 200:
             data = response.json()
@@ -29,7 +31,6 @@ def fetch_and_notify():
                 if charger_index > 4:
                     break
                 
-                # Live status string from EA API (AVAILABLE, IN_USE, OUT_OF_SERVICE)
                 status_raw = str(evse.get("status", "")).upper()
                 
                 if "AVAIL" in status_raw:
@@ -39,17 +40,17 @@ def fetch_and_notify():
                 elif "OUT" in status_raw or "OFFLINE" in status_raw:
                     status_str = "Offline 🔴"
                 else:
-                    status_str = "In Use 🔵"  # Active charging fallback
+                    status_str = "In Use 🔵"
                     
                 status_list.append({"id": f"Charger 0{charger_index}", "status": status_str})
                 charger_index += 1
         else:
-            print(f"EA API status code: {response.status_code}")
+            print(f"API Error payload: {response.text[:200]}")
             
     except Exception as e:
         print(f"Error fetching EA data: {e}")
 
-    # Fallback padding to ensure all 4 chargers display
+    # Fallback padding to guarantee 4 rows
     while len(status_list) < 4:
         status_list.append({"id": f"Charger 0{len(status_list)+1}", "status": "Unknown ⚪"})
 
@@ -72,7 +73,10 @@ def fetch_and_notify():
         }]
     }
 
-    requests.post(WEBHOOK_URL, json=payload)
+    if WEBHOOK_URL:
+        requests.post(WEBHOOK_URL, json=payload)
+    else:
+        print("Error: CHAT_WEBHOOK_URL environment variable is missing.")
 
 if __name__ == "__main__":
     fetch_and_notify()
