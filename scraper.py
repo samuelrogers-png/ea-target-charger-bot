@@ -4,19 +4,25 @@ import requests
 WEBHOOK_URL = os.environ.get("CHAT_WEBHOOK_URL")
 
 def parse_status(raw_val):
-    s = str(raw_val).upper()
-    if "AVAIL" in s:
+    if not raw_val:
         return "Available 🟢"
-    elif any(k in s for k in ["USE", "OCCUPIED", "CHARGING", "BUSY", "PLUGGED", "IN_USE"]):
+        
+    s = str(raw_val).upper().strip()
+    
+    # Direct matching against EA status codes
+    if any(k in s for k in ["AVAIL", "FREE", "READY", "IDLE", "OPEN"]):
+        return "Available 🟢"
+    elif any(k in s for k in ["OCCUPIED", "CHARGING", "IN_USE", "USE", "BUSY", "PLUGGED", "PREPARING"]):
         return "In Use 🔵"
-    elif any(k in s for k in ["OUT", "OFFLINE", "DOWN", "FAULT", "UNAVAIL"]):
+    elif any(k in s for k in ["OUT", "OFFLINE", "DOWN", "FAULT", "UNAVAIL", "MAINTENANCE"]):
         return "Offline 🔴"
-    return "In Use 🔵"
+        
+    # Default fallback changed to Available to prevent false "In Use" states
+    return "Available 🟢"
 
 def fetch_and_notify():
     status_list = []
     
-    # Target station location: 4001 S Maryland Pkwy, Las Vegas
     lat, lon = 36.1158, -115.1368
     ea_url = f"https://api.electrifyamerica.com/v2/locations?lat={lat}&lon={lon}&radius=5"
 
@@ -34,7 +40,6 @@ def fetch_and_notify():
             data = response.json()
             locations = data.get("locations", []) if isinstance(data, dict) else data
             
-            # Find station 200008 or fallback to nearest Target station match
             target_station = None
             for loc in locations:
                 loc_id = str(loc.get("id", ""))
@@ -53,11 +58,13 @@ def fetch_and_notify():
                     if charger_index > 4:
                         break
                     
-                    status_raw = evse.get("status", "")
+                    status_raw = evse.get("status") or evse.get("evseStatus") or ""
                     if not status_raw and "connectors" in evse:
                         connectors = evse.get("connectors", [])
                         if connectors:
                             status_raw = connectors[0].get("status", "")
+
+                    print(f"Charger 0{charger_index} raw status: '{status_raw}'")
 
                     status_list.append({
                         "id": f"Charger 0{charger_index}",
@@ -68,9 +75,9 @@ def fetch_and_notify():
     except Exception as e:
         print(f"Fetch error: {e}")
 
-    # Fallback to keep formatting clean if array length varies
+    # Default missing items to Available instead of hardcoded In Use
     while len(status_list) < 4:
-        status_list.append({"id": f"Charger 0{len(status_list)+1}", "status": "In Use 🔵"})
+        status_list.append({"id": f"Charger 0{len(status_list)+1}", "status": "Available 🟢"})
 
     payload = {
         "cardsV2": [{
