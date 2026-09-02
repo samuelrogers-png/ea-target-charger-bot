@@ -3,13 +3,23 @@ import requests
 
 WEBHOOK_URL = os.environ.get("CHAT_WEBHOOK_URL")
 
-# Hardcoded fallback URL so you don't need GitHub Secrets
-PROXY_URL = os.environ.get("PROXY_URL", "https://summer-bush-6b1d.helpmeblizzard.workers.dev")
+# Clean default Cloudflare relay URL
+HARDCODED_PROXY = "https://summer-bush-6b1d.helpmeblizzard.workers.dev"
+
+# Fetch environment variable
+env_proxy = os.environ.get("PROXY_URL", "").strip()
+
+# Bypass broken GitHub secrets containing markdown or brackets
+if not env_proxy or "[" in env_proxy or "]" in env_proxy or "(" in env_proxy:
+    PROXY_URL = HARDCODED_PROXY
+else:
+    PROXY_URL = env_proxy
 
 def fetch_and_notify():
     status_list = []
     
     try:
+        print(f"Connecting using proxy: {PROXY_URL}")
         response = requests.get(PROXY_URL, timeout=15)
         print(f"Proxy HTTP status: {response.status_code}")
         
@@ -26,9 +36,9 @@ def fetch_and_notify():
                 
                 if "AVAIL" in status_raw:
                     status_str = "Available 🟢"
-                elif "USE" in status_raw or "OCCUPIED" in status_raw or "CHARGING" in status_raw:
+                elif "USE" in status_raw or "OCCUPIED" in status_raw or "CHARGING" in status_raw or "BUSY" in status_raw:
                     status_str = "In Use 🔵"
-                elif "OUT" in status_raw or "OFFLINE" in status_raw:
+                elif "OUT" in status_raw or "OFFLINE" in status_raw or "DOWN" in status_raw:
                     status_str = "Offline 🔴"
                 else:
                     status_str = "In Use 🔵"
@@ -36,11 +46,12 @@ def fetch_and_notify():
                 status_list.append({"id": f"Charger 0{charger_index}", "status": status_str})
                 charger_index += 1
         else:
-            print(f"Proxy Error: {response.text[:200]}")
+            print(f"Proxy Error Response: {response.text[:200]}")
             
     except Exception as e:
         print(f"Error calling proxy relay: {e}")
 
+    # Fallback padding if data is missing or incomplete
     while len(status_list) < 4:
         status_list.append({"id": f"Charger 0{len(status_list)+1}", "status": "Unknown ⚪"})
 
