@@ -2,8 +2,8 @@ name: EA Target Charger Update
 
 on:
   schedule:
-    - cron: '*/15 * * * *'  # Runs every 15 minutes automatically
-  workflow_dispatch:         # Allows manual trigger under Actions tab
+    - cron: '*/15 * * * *'
+  workflow_dispatch:
 
 jobs:
   scrape-and-post:
@@ -17,14 +17,15 @@ jobs:
         with:
           python-version: '3.10'
 
-      - name: Install Tools
+      - name: Install Dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install requests cloudscraper
+          pip install requests
 
       - name: Run Scraper
         env:
           CHAT_WEBHOOK_URL: ${{ secrets.CHAT_WEBHOOK_URL }}
+          NREL_API_KEY: ${{ secrets.NREL_API_KEY }}
         run: |
           python scraper.py
           
