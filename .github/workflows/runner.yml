@@ -3,7 +3,7 @@ name: EA Target Charger Update
 on:
   schedule:
     - cron: '*/15 * * * *'  # Runs every 15 minutes automatically
-  workflow_dispatch:        # Enables the manual trigger button
+  workflow_dispatch:         # Allows manual trigger under Actions tab
 
 jobs:
   scrape-and-post:
@@ -19,11 +19,12 @@ jobs:
 
       - name: Install Tools
         run: |
-          pip install requests playwright
-          playwright install chromium
+          python -m pip install --upgrade pip
+          pip install requests cloudscraper
 
       - name: Run Scraper
         env:
           CHAT_WEBHOOK_URL: ${{ secrets.CHAT_WEBHOOK_URL }}
-        run: python scraper.py
-        
+        run: |
+          python scraper.py
+          
