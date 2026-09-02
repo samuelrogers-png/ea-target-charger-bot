@@ -2,60 +2,45 @@ import os
 import requests
 
 WEBHOOK_URL = os.environ.get("CHAT_WEBHOOK_URL")
-NREL_API_KEY = os.environ.get("NREL_API_KEY", "DEMO_KEY")
 
-# Target Coordinates for 4001 S Maryland Pkwy (Target Las Vegas)
-LAT = "36.1070"
-LON = "-115.1364"
+# Hardcoded fallback URL so you don't need GitHub Secrets
+PROXY_URL = os.environ.get("PROXY_URL", "https://summer-bush-6b1d.helpmeblizzard.workers.dev")
 
 def fetch_and_notify():
-    # NLR API query using direct coordinates and fuel_type=ELEC
-    url = f"https://developer.nlr.gov/api/alt-fuel-stations/v1/nearest.json?api_key={NREL_API_KEY}&latitude={LAT}&longitude={LON}&fuel_type=ELEC&limit=5"
-    
     status_list = []
     
     try:
-        response = requests.get(url, timeout=10)
-        print(f"API HTTP Status: {response.status_code}")
+        response = requests.get(PROXY_URL, timeout=15)
+        print(f"Proxy HTTP status: {response.status_code}")
         
         if response.status_code == 200:
             data = response.json()
-            stations = data.get("fuel_stations", [])
+            evses = data.get("evses", [])
             
-            # Find the Electrify America station at Maryland Pkwy
-            ea_station = None
-            for station in stations:
-                network = str(station.get("ev_network", "")).upper()
-                address = str(station.get("street_address", "")).upper()
-                if "ELECTRIFY" in network or "MARYLAND" in address:
-                    ea_station = station
+            charger_index = 1
+            for evse in evses:
+                if charger_index > 4:
                     break
-            
-            # Default to closest station if specific match loop passes
-            if not ea_station and stations:
-                ea_station = stations[0]
-
-            if ea_station:
-                status_code = ea_station.get("status_code", "E")
                 
-                if status_code == "E":
-                    general_status = "Available 🟢"
-                elif status_code == "T":
-                    general_status = "Offline 🔴"
+                status_raw = str(evse.get("status", "")).upper()
+                
+                if "AVAIL" in status_raw:
+                    status_str = "Available 🟢"
+                elif "USE" in status_raw or "OCCUPIED" in status_raw or "CHARGING" in status_raw:
+                    status_str = "In Use 🔵"
+                elif "OUT" in status_raw or "OFFLINE" in status_raw:
+                    status_str = "Offline 🔴"
                 else:
-                    general_status = "In Use 🔵"
-                
-                for i in range(1, 5):
-                    status_list.append({"id": f"Charger 0{i}", "status": general_status})
-            else:
-                print("No matching EV station found in payload.")
+                    status_str = "In Use 🔵"
+                    
+                status_list.append({"id": f"Charger 0{charger_index}", "status": status_str})
+                charger_index += 1
         else:
-            print(f"API Error Response: {response.text[:200]}")
+            print(f"Proxy Error: {response.text[:200]}")
             
     except Exception as e:
-        print(f"Script execution error: {e}")
+        print(f"Error calling proxy relay: {e}")
 
-    # Fallback padding to ensure card renders
     while len(status_list) < 4:
         status_list.append({"id": f"Charger 0{len(status_list)+1}", "status": "Unknown ⚪"})
 
@@ -64,7 +49,7 @@ def fetch_and_notify():
             "cardId": "ea_target_auto_update",
             "card": {
                 "header": {
-                    "title": "⚡ EA Charger Status (Automated)",
+                    "title": "⚡ EA Charger Status (Live)",
                     "subtitle": "Target (4001 S Maryland Pkwy)"
                 },
                 "sections": [{
@@ -79,8 +64,6 @@ def fetch_and_notify():
 
     if WEBHOOK_URL:
         requests.post(WEBHOOK_URL, json=payload)
-    else:
-        print("Missing CHAT_WEBHOOK_URL secret.")
 
 if __name__ == "__main__":
     fetch_and_notify()
