@@ -9,6 +9,7 @@ STATION_ADDRESS = "4001 S Maryland Pkwy"
 STATION_ZIP = "89119"
 
 def fetch_and_notify():
+    # Active endpoint URL on developer.nlr.gov
     url = f"https://developer.nlr.gov/api/alt-fuel-stations/v1/nearest.json?api_key={NREL_API_KEY}&location={STATION_ADDRESS}+{STATION_ZIP}&ev_network=Electrify+America&limit=1"
     
     status_list = []
@@ -42,7 +43,7 @@ def fetch_and_notify():
     except Exception as e:
         print(f"Error fetching data: {e}")
 
-    # Fallback padding
+    # Fallback padding to guarantee 4 entries
     while len(status_list) < 4:
         status_list.append({"id": f"Charger 0{len(status_list)+1}", "status": "Unknown ⚪"})
 
