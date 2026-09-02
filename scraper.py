@@ -1,60 +1,51 @@
 import os
 import requests
-import cloudscraper
 
 WEBHOOK_URL = os.environ.get("CHAT_WEBHOOK_URL")
-EA_STATION_ID = "200008"
+NREL_API_KEY = os.environ.get("NREL_API_KEY", "DEMO_KEY")
+
+# Target Station - 4001 S Maryland Pkwy, Las Vegas, NV
+STATION_ADDRESS = "4001 S Maryland Pkwy"
+STATION_ZIP = "89119"
 
 def fetch_and_notify():
-    # Use cloudscraper to simulate a real browser TLS handshake
-    scraper = cloudscraper.create_scraper(
-        browser={
-            'browser': 'chrome',
-            'platform': 'windows',
-            'desktop': True
-        }
-    )
+    url = f"https://developer.nlr.gov/api/alt-fuel-stations/v1/nearest.json?api_key={NREL_API_KEY}&location={STATION_ADDRESS}+{STATION_ZIP}&ev_network=Electrify+America&limit=1"
     
-    url = f"https://api.electrifyamerica.com/v2/locations/{EA_STATION_ID}"
     status_list = []
     
     try:
-        response = scraper.get(url, timeout=15)
-        print(f"EA API status code: {response.status_code}")
+        response = requests.get(url, timeout=10)
+        print(f"API status code: {response.status_code}")
         
         if response.status_code == 200:
             data = response.json()
-            evses = data.get("evses", [])
+            stations = data.get("fuel_stations", [])
             
-            charger_index = 1
-            for evse in evses:
-                if charger_index > 4:
-                    break
+            if stations:
+                station = stations[0]
+                status_code = station.get("status_code")
                 
-                status_raw = str(evse.get("status", "")).upper()
-                
-                if "AVAIL" in status_raw:
-                    status_str = "Available 🟢"
-                elif "USE" in status_raw or "OCCUPIED" in status_raw:
-                    status_str = "In Use 🔵"
-                elif "OUT" in status_raw or "OFFLINE" in status_raw:
-                    status_str = "Offline 🔴"
+                if status_code == "E":
+                    general_status = "Available 🟢"
+                elif status_code == "T":
+                    general_status = "Offline 🔴"
                 else:
-                    status_str = "In Use 🔵"
-                    
-                status_list.append({"id": f"Charger 0{charger_index}", "status": status_str})
-                charger_index += 1
+                    general_status = "In Use 🔵"
+                
+                for i in range(1, 5):
+                    status_list.append({"id": f"Charger 0{i}", "status": general_status})
+            else:
+                print("No station found matching location criteria.")
         else:
             print(f"API Error payload: {response.text[:200]}")
             
     except Exception as e:
-        print(f"Error fetching EA data: {e}")
+        print(f"Error fetching data: {e}")
 
-    # Fallback padding to guarantee 4 rows
+    # Fallback padding
     while len(status_list) < 4:
         status_list.append({"id": f"Charger 0{len(status_list)+1}", "status": "Unknown ⚪"})
 
-    # Google Chat Payload
     payload = {
         "cardsV2": [{
             "cardId": "ea_target_auto_update",
@@ -75,8 +66,6 @@ def fetch_and_notify():
 
     if WEBHOOK_URL:
         requests.post(WEBHOOK_URL, json=payload)
-    else:
-        print("Error: CHAT_WEBHOOK_URL environment variable is missing.")
 
 if __name__ == "__main__":
     fetch_and_notify()
